@@ -1,0 +1,102 @@
+version: '3'
+
+vars:
+  GO_BIN: ./_output/go
+  PYTHON_BIN: ./_output/python
+  CONDA_ENV: demo-grpc
+  PY_GRPC_LIBs:
+    - "grpcio"
+    - "grpcio-tools"
+  PROTOC_GEN_GO_VERSION: v1.33.0
+  PROTOC_GEN_GO_GRPC_VERSION: v1.3.0
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  # ---------- Conda / Python ----------
+  py:deps:
+    desc: Ensure conda environment exists (create if missing)
+    cmds:
+      - |
+        if ! conda env list | grep -q {{.CONDA_ENV}}; then
+          echo "Conda env {{.CONDA_ENV}} not found. Creating..."
+          conda env create -f py-environment.yaml
+        else
+          echo "Conda env {{.CONDA_ENV}} already exists. Skipping creation"
+        fi
+      - conda run -n {{.CONDA_ENV}} python --version
+
+  py:build:
+    desc: Build python app with pyinstaller (conda)
+    deps: [py:deps]
+    cmds:
+      - mkdir -p {{.PYTHON_BIN}}
+      - conda run -n {{.CONDA_ENV}} python build.py
+
+  # ---------- Go ----------
+  go:deps:
+    desc: Install Go dependencies
+    cmds:
+      - go mod tidy
+
+  go:build:
+    desc: Build go app
+    cmds:
+      - mkdir -p {{.GO_BIN}}
+      - go build -o {{.GO_BIN}} main.go
+
+  # ---------- gRPC ----------
+  go:install-protoc:
+    desc: Install protoc-gen-go and protoc-gen-go-grpc
+    deps: [go:deps]
+    cmds:
+      - |
+        echo "Installing protoc-gen-go@{{.PROTOC_GEN_GO_VERSION}}"
+        echo "Installing protoc-gen-go-grpc@{{.PROTOC_GEN_GO_GRPC_VERSION}}"
+
+        if ! command -v protoc-gen-go >/dev/null 2>&1; then
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@{{.PROTOC_GEN_GO_VERSION}}
+        else
+          echo "protoc-gen-go already installed"
+        fi
+
+        if ! command -v protoc-gen-go-grpc >/dev/null 2>&1; then
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@{{.PROTOC_GEN_GO_GRPC_VERSION}}
+        else
+          echo "protoc-gen-go-grpc already installed"
+        fi
+
+  py:install-protoc:
+    desc: Install grpcio and grpcio-tools
+    deps: [py:deps]
+    cmds:
+      - |
+        for pkg in {{.PYTHON_LIBS}}; do
+          INSTALLED=$(conda run -n {{.CONDA_ENV}} python -c "import pkg_resources; \
+            [p for p in pkg_resources.working_set if p.project_name=='${pkg%%==*}']" || echo "")
+          if [ -z "$INSTALLED" ]; then
+            echo "Installing $pkg..."
+            conda run -n {{.CONDA_ENV}} pip install "$pkg"
+          else
+            echo "$pkg already installed"
+          fi
+        done
+
+  py:protoc:
+    desc: Generate Python gRPC code
+    deps: [py:install-protoc]
+    cmds:
+      - conda run -n {{.CONDA_ENV}} python build_protoc.py
+
+  go:protoc:
+    desc: Generate Go gRPC code
+    deps: [go:install-protoc]
+    cmds:
+      - protoc --go_out=paths=source_relative:. --go-grpc_out=paths=source_relative:. api/hello.proto
+
+  all:protoc:
+    desc: Generate go and python gRPC code
+    deps: [py:protoc, go:protoc]
