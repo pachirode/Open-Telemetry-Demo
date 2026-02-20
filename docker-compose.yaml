@@ -26,3 +26,19 @@ services:
       - "5318:4318"
       - "5317:4317"
     restart: always
+
+  prometheus:
+    image: quay.io/prometheus/prometheus:v2.49.1
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/etc/prometheus/console_libraries
+      - --web.console.templates=/etc/prometheus/consoles
+      - --enable-feature=examplar-storage
+      - --enable-feature=otlp-write-receiver
+    restart: always

@@ -2,6 +2,15 @@
 
 一次完整请求在分布式系统的端到端执行路径
 
+# Tracer Provider
+
+`Trace` 工厂，大多数应用中只初始化一次，其生命周期和应用的生命周期一致
+初始化的第一步为 `Resource` 和 `Explorter` 的初始化，有些 `SDK` 中以及初始化全局的 `Tracer Provider`
+
+### Exporter
+
+将链路信息发送给消费者，消费者可以是标准输出，`OpenTelemetry Collector` 或者其他后端
+
 ### Trace
 
 一个 `Trace` 通常对应一次请求，其本身不直接记录动作，而是由多个 `Span` 组成
@@ -30,3 +39,12 @@
   - `Server`
   - `Internal`
 
+##### 上下文
+
+`Span` 上下文是不可变对象是 `Span` 的一部分，包含一些链路的信息，可以用来创建 `Span` 链接
+
+
+### Baggage
+
+`Span` 中的上下文，可以将我们想要的数据存放在其中，这样任意一个 `Span` 都可以读到
+自动插桩会在大多数网络中包含 `Baggage` 可能会导致信息泄漏
